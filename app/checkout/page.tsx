@@ -22,6 +22,7 @@ import {
   BASE_PRICE,
   ONE_PAIR_PRICE,
   SHOE_CLEANER_PRICE,
+  FLAME_SOCKS_PRICE,
   ONLINE_DELIVERY_MIN_DAYS,
   ONLINE_DELIVERY_MAX_DAYS,
   COD_DELIVERY_MIN_DAYS,
@@ -438,6 +439,7 @@ export default function CheckoutPage() {
     "online",
   );
   const [addShoeCleaner, setAddShoeCleaner] = useState(false);
+  const [addSocks, setAddSocks] = useState(false);
   const [currentStep, setCurrentStep] = useState<CheckoutStep>("payment");
   const [customerDetails, setCustomerDetails] = useState<CustomerDetails>({
     name: "",
@@ -461,6 +463,7 @@ export default function CheckoutPage() {
   } | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
 
+  // Sanity flag: when on, the paid Flame Socks add-on is shown.
   const [freeSocksOffer, setFreeSocksOffer] = useState(false);
   const [shoeCleanerAddon, setShoeCleanerAddon] = useState(false);
   const [customAddons, setCustomAddons] = useState<CustomAddon[]>([]);
@@ -517,6 +520,13 @@ export default function CheckoutPage() {
       setAddShoeCleaner(false);
     }
   }, [settingsLoaded, shoeCleanerAddon, addShoeCleaner]);
+
+  // Reset socks selection if the offer is turned off in Sanity
+  useEffect(() => {
+    if (settingsLoaded && !freeSocksOffer && addSocks) {
+      setAddSocks(false);
+    }
+  }, [settingsLoaded, freeSocksOffer, addSocks]);
 
   // Drop selected add-ons that were disabled or removed in Sanity
   useEffect(() => {
@@ -615,6 +625,8 @@ export default function CheckoutPage() {
   const cleanerCharge =
     shoeCleanerAddon && addShoeCleaner ? SHOE_CLEANER_PRICE : 0;
 
+  const socksCharge = freeSocksOffer && addSocks ? FLAME_SOCKS_PRICE : 0;
+
   const selectedCustomAddons = customAddons.filter((a) =>
     selectedAddonKeys.includes(a._key),
   );
@@ -624,7 +636,11 @@ export default function CheckoutPage() {
   );
 
   const totalAmount =
-    subtotal + shippingCharge + cleanerCharge + customAddonsCharge;
+    subtotal +
+    shippingCharge +
+    cleanerCharge +
+    socksCharge +
+    customAddonsCharge;
 
   // COD advance: same helper the server uses.
   const isCod = shippingMethod === "cod";
@@ -757,7 +773,7 @@ ${pairLines.join("\n\n")}
 
 *PAYMENT SUMMARY*
 - Product Price: ₹${subtotal}
-${freeSocksOffer ? "- Free socks included\n" : ""}${cleanerCharge > 0 ? `- Add-on: Shoe Cleaner (+₹${SHOE_CLEANER_PRICE})\n` : ""}${customAddonLines}- Shipping: ${shippingLine}
+${socksCharge > 0 ? `- Add-on: Flame Socks (+₹${FLAME_SOCKS_PRICE})\n` : ""}${cleanerCharge > 0 ? `- Add-on: Shoe Cleaner (+₹${SHOE_CLEANER_PRICE})\n` : ""}${customAddonLines}- Shipping: ${shippingLine}
 ${isCod ? `- Advance attempted: ₹${codAdvance}\n` : ""}
 *Total Amount Payable: ₹${totalAmount}✅*`.trim();
   };
@@ -847,8 +863,8 @@ ${isCod ? `- Advance attempted: ₹${codAdvance}\n` : ""}
           customerDetails,
           shippingMethod,
           addShoeCleaner: shoeCleanerAddon && addShoeCleaner,
+          addFlameSocks: freeSocksOffer && addSocks,
           customAddonKeys: selectedAddonKeys,
-          freeSocksOffer,
           // Random surprise pair (two pair offer). Server must accept and
           // store these on the order so you know what to pack.
           hasRandomPair,
@@ -1119,19 +1135,13 @@ ${isCod ? `- Advance attempted: ₹${codAdvance}\n` : ""}
                 </h2>
                 <div className="space-y-2">
                   {freeSocksOffer && (
-                    <div className="flex items-center justify-between gap-3 rounded-2xl bg-primary p-4 shadow-[inset_0_0_0_2px_#000]">
-                      <div>
-                        <p className="text-sm font-bold tracking-tight">
-                          Free socks
-                        </p>
-                        <p className="mt-1 text-xs text-black/70">
-                          Included with your order.
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-black px-2 py-0.5 text-xs font-bold text-primary">
-                        FREE
-                      </span>
-                    </div>
+                    <AddOn
+                      checked={addSocks}
+                      onToggle={() => setAddSocks((v) => !v)}
+                      title="Flame Socks"
+                      desc="Add a pair of flame socks to your order."
+                      price={inr(FLAME_SOCKS_PRICE)}
+                    />
                   )}
                   {shoeCleanerAddon && (
                     <AddOn
@@ -1239,8 +1249,8 @@ ${isCod ? `- Advance attempted: ₹${codAdvance}\n` : ""}
                 value="FREE"
               />
             )}
-            {freeSocksOffer && (
-              <Row indent muted label="Socks" value="FREE" />
+            {socksCharge > 0 && (
+              <Row label="Flame socks" value={`+${inr(FLAME_SOCKS_PRICE)}`} />
             )}
             {cleanerCharge > 0 && (
               <Row label="Shoe cleaner" value={`+${inr(SHOE_CLEANER_PRICE)}`} />
@@ -1253,9 +1263,7 @@ ${isCod ? `- Advance attempted: ₹${codAdvance}\n` : ""}
               />
             ))}
             <Row
-              label={
-                isCod ? "Shipping (COD)" : "Shipping (online)"
-              }
+              label={isCod ? "Shipping (COD)" : "Shipping (online)"}
               value={shippingCharge === 0 ? "FREE" : inr(shippingCharge)}
             />
             {outsideKeralaExtra > 0 && (
@@ -1331,11 +1339,7 @@ ${isCod ? `- Advance attempted: ₹${codAdvance}\n` : ""}
               loading={isLoading}
               className="min-w-[200px]"
             >
-              {isLoading
-                ? "Processing"
-                : isCod
-                  ? "Pay advance"
-                  : "Pay now"}
+              {isLoading ? "Processing" : isCod ? "Pay advance" : "Pay now"}
             </PillCTA>
           )}
         </div>

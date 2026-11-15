@@ -18,3 +18,4 @@ export const ONLINE_DELIVERY_MIN_DAYS = 5;
 export const ONLINE_DELIVERY_MAX_DAYS = 8;
 export const COD_DELIVERY_MIN_DAYS = 7;
 export const COD_DELIVERY_MAX_DAYS = 10;
+export const FLAME_SOCKS_PRICE = 99;
