@@ -4,6 +4,7 @@ import { serverClient } from "@/lib/sanity-server";
 import { priceCart, generateOrderId } from "@/lib/checkout-pricing";
 import { validateCustomer } from "@/lib/checkout-validation";
 import { INDIAN_STATES } from "@/lib/indian-states";
+import { FLAME_SOCKS_PRICE } from "@/lib/checkout-constants";
 
 export const runtime = "nodejs";
 
@@ -22,12 +23,19 @@ export async function POST(req: NextRequest) {
       customerDetails,
       shippingMethod,
       addShoeCleaner,
-      freeSocksOffer,
+      addFlameSocks,
     } = body ?? {};
 
     // Anything other than "one-pair" is treated as two pair (original behavior)
     const offerType = body?.offerType === "one-pair" ? "one-pair" : "two-pair";
     const isOnePair = offerType === "one-pair";
+
+    // Random surprise pair: decided by the offer, never by the client flag.
+    // Every two pair order gets one.
+    const hasRandomPair = !isOnePair;
+    const randomPairSize = hasRandomPair
+      ? String(body?.randomPairSize ?? "").trim().slice(0, 10)
+      : "";
 
     // ---- 1. Validate inputs ----
     if (!Array.isArray(lines) || lines.length === 0) {
@@ -38,6 +46,14 @@ export async function POST(req: NextRequest) {
     if (isOnePair && (lines.length !== 1 || lines[0]?.isFreeItem)) {
       return NextResponse.json(
         { error: "Invalid one pair order" },
+        { status: 400 },
+      );
+    }
+
+    // Two pair offer: the surprise pair needs a size so we can pack it
+    if (hasRandomPair && !randomPairSize) {
+      return NextResponse.json(
+        { error: "Select a size for your random pair" },
         { status: 400 },
       );
     }
@@ -72,6 +88,22 @@ export async function POST(req: NextRequest) {
       offerType: typeof offerType;
       state: string;
     });
+
+    // ---- 2a. Flame socks: only if the offer is switched on in Sanity ----
+    let flameSocks = false;
+    if (addFlameSocks) {
+      const settings = await serverClient.fetch(
+        `*[_type == "settings"][0]{ freeSocksOffer }`,
+      );
+      if (!settings?.freeSocksOffer) {
+        return NextResponse.json(
+          { error: "Flame socks are no longer available. Please review your order." },
+          { status: 400 },
+        );
+      }
+      flameSocks = true;
+    }
+    const flameSocksTotal = flameSocks ? FLAME_SOCKS_PRICE : 0;
 
     // ---- 2b. Custom add-ons: title + price always come from Sanity ----
     const requestedKeys: string[] = Array.isArray(body?.customAddonKeys)
@@ -109,12 +141,13 @@ export async function POST(req: NextRequest) {
 
     // Add-ons raise the total. Prepaid pays it now; COD pays it on delivery
     // (COD advance stays as priced).
-    const totalAmount = priced.totalAmount + customAddonsTotal;
+    const addonsTotal = customAddonsTotal + flameSocksTotal;
+    const totalAmount = priced.totalAmount + addonsTotal;
     const paymentAmount = priced.isCod
       ? priced.paymentAmount
-      : priced.paymentAmount + customAddonsTotal;
+      : priced.paymentAmount + addonsTotal;
     const remainingAmount = priced.isCod
-      ? priced.remainingAmount + customAddonsTotal
+      ? priced.remainingAmount + addonsTotal
       : priced.remainingAmount;
 
     // ---- 3. Create Sanity order (payment pending) ----
@@ -133,6 +166,9 @@ export async function POST(req: NextRequest) {
         price: it.price,
         isFreeItem: it.isFreeItem,
       })),
+      // Random surprise pair (we pick the style at packing)
+      hasRandomPair,
+      randomPairSize: hasRandomPair ? randomPairSize : "",
       customerName: customerDetails.name,
       instagramId: customerDetails.instagramId || "",
       contact1: customerDetails.contact1,
@@ -144,7 +180,8 @@ export async function POST(req: NextRequest) {
       landmark: customerDetails.landmark || "",
       shippingMethod,
       shoeCleanerAddon: !!addShoeCleaner,
-      freeSocksOffer: !!freeSocksOffer,
+      flameSocksAddon: flameSocks,
+      flameSocksPrice: flameSocksTotal,
       customAddons: customAddons.map((a) => ({
         _key: a._key,
         _type: "orderCustomAddon",
