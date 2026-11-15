@@ -4,7 +4,6 @@ import { serverClient } from "@/lib/sanity-server";
 import { priceCart, generateOrderId } from "@/lib/checkout-pricing";
 import { validateCustomer } from "@/lib/checkout-validation";
 import { INDIAN_STATES } from "@/lib/indian-states";
-import { FLAME_SOCKS_PRICE } from "@/lib/checkout-constants";
 
 export const runtime = "nodejs";
 
@@ -23,19 +22,12 @@ export async function POST(req: NextRequest) {
       customerDetails,
       shippingMethod,
       addShoeCleaner,
-      addFlameSocks,
+      freeSocksOffer,
     } = body ?? {};
 
     // Anything other than "one-pair" is treated as two pair (original behavior)
     const offerType = body?.offerType === "one-pair" ? "one-pair" : "two-pair";
     const isOnePair = offerType === "one-pair";
-
-    // Random surprise pair: decided by the offer, never by the client flag.
-    // Every two pair order gets one.
-    const hasRandomPair = !isOnePair;
-    const randomPairSize = hasRandomPair
-      ? String(body?.randomPairSize ?? "").trim().slice(0, 10)
-      : "";
 
     // ---- 1. Validate inputs ----
     if (!Array.isArray(lines) || lines.length === 0) {
@@ -50,7 +42,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Two pair offer: the surprise pair needs a size so we can pack it
+    // Random surprise pair: only the two pair offer gets one.
+    // It is the 3rd pair if the customer also chose a free pair, else the 2nd.
+    const hasRandomPair = !isOnePair && !!body?.hasRandomPair;
+    const randomPairSize = hasRandomPair
+      ? String(body?.randomPairSize ?? "").trim().slice(0, 10)
+      : "";
+    const randomPairNo = lines.length > 1 ? 3 : 2;
+
     if (hasRandomPair && !randomPairSize) {
       return NextResponse.json(
         { error: "Select a size for your random pair" },
@@ -89,22 +88,6 @@ export async function POST(req: NextRequest) {
       state: string;
     });
 
-    // ---- 2a. Flame socks: only if the offer is switched on in Sanity ----
-    let flameSocks = false;
-    if (addFlameSocks) {
-      const settings = await serverClient.fetch(
-        `*[_type == "settings"][0]{ freeSocksOffer }`,
-      );
-      if (!settings?.freeSocksOffer) {
-        return NextResponse.json(
-          { error: "Flame socks are no longer available. Please review your order." },
-          { status: 400 },
-        );
-      }
-      flameSocks = true;
-    }
-    const flameSocksTotal = flameSocks ? FLAME_SOCKS_PRICE : 0;
-
     // ---- 2b. Custom add-ons: title + price always come from Sanity ----
     const requestedKeys: string[] = Array.isArray(body?.customAddonKeys)
       ? Array.from(
@@ -141,34 +124,57 @@ export async function POST(req: NextRequest) {
 
     // Add-ons raise the total. Prepaid pays it now; COD pays it on delivery
     // (COD advance stays as priced).
-    const addonsTotal = customAddonsTotal + flameSocksTotal;
-    const totalAmount = priced.totalAmount + addonsTotal;
+    const totalAmount = priced.totalAmount + customAddonsTotal;
     const paymentAmount = priced.isCod
       ? priced.paymentAmount
-      : priced.paymentAmount + addonsTotal;
+      : priced.paymentAmount + customAddonsTotal;
     const remainingAmount = priced.isCod
-      ? priced.remainingAmount + addonsTotal
+      ? priced.remainingAmount + customAddonsTotal
       : priced.remainingAmount;
 
     // ---- 3. Create Sanity order (payment pending) ----
     const orderId = generateOrderId();
+
+    // Shoe sizes in the schema are numbers; keep the raw string if not numeric
+    const randomSizeNum = Number(randomPairSize);
+    const randomItemSize = Number.isFinite(randomSizeNum)
+      ? randomSizeNum
+      : randomPairSize;
+
     const sanityDoc = {
       _type: "order",
       orderId,
       offerType, // saved so you can see which offer the order used
-      items: priced.items.map((it) => ({
-        _key: it.productId + it.size,
-        _type: "orderItem",
-        productId: it.productId,
-        productName: it.productName,
-        imageUrl: it.imageUrl,
-        size: it.size,
-        price: it.price,
-        isFreeItem: it.isFreeItem,
-      })),
-      // Random surprise pair (we pick the style at packing)
+      items: [
+        ...priced.items.map((it) => ({
+          _key: it.productId + it.size,
+          _type: "orderItem",
+          productId: it.productId,
+          productName: it.productName,
+          imageUrl: it.imageUrl,
+          size: it.size,
+          price: it.price,
+          isFreeItem: it.isFreeItem,
+          isRandomPair: false,
+        })),
+        // Random surprise pair saved as its own line so it shows in the order
+        ...(hasRandomPair
+          ? [
+              {
+                _key: `random-pair-${randomPairSize}`,
+                _type: "orderItem",
+                productName: `Random Surprise Pair (pair ${randomPairNo})`,
+                size: randomItemSize,
+                price: 0,
+                isFreeItem: true,
+                isRandomPair: true,
+              },
+            ]
+          : []),
+      ],
       hasRandomPair,
-      randomPairSize: hasRandomPair ? randomPairSize : "",
+      randomPairNo: hasRandomPair ? randomPairNo : undefined,
+      randomPairSize: hasRandomPair ? randomPairSize : undefined,
       customerName: customerDetails.name,
       instagramId: customerDetails.instagramId || "",
       contact1: customerDetails.contact1,
@@ -180,8 +186,7 @@ export async function POST(req: NextRequest) {
       landmark: customerDetails.landmark || "",
       shippingMethod,
       shoeCleanerAddon: !!addShoeCleaner,
-      flameSocksAddon: flameSocks,
-      flameSocksPrice: flameSocksTotal,
+      freeSocksOffer: !!freeSocksOffer,
       customAddons: customAddons.map((a) => ({
         _key: a._key,
         _type: "orderCustomAddon",
@@ -209,6 +214,7 @@ export async function POST(req: NextRequest) {
         offerType,
         isCod: String(priced.isCod),
         remainingAmount: String(remainingAmount),
+        randomPairSize: randomPairSize || "none",
       },
     });
 

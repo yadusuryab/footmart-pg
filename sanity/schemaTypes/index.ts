@@ -204,7 +204,6 @@ const settings = {
     },
   ],
 }
-
 const orderItem = {
   name: "orderItem",
   title: "Order Item",
@@ -217,6 +216,7 @@ const orderItem = {
     { name: "size", title: "Size", type: "number" },
     { name: "price", title: "Price", type: "number" },
     { name: "isFreeItem", title: "Free Item (BOGO)?", type: "boolean", initialValue: false },
+    { name: "isRandomPair", title: "Random Surprise Pair?", type: "boolean", initialValue: false },
   ],
 }
 
@@ -232,7 +232,12 @@ const order = {
       description: "Internal receipt / order reference",
       validation: (Rule: any) => Rule.required(),
     },
+    
+    { name: "offerType", title: "Offer Type", type: "string" },
     { name: "items", title: "Items", type: "array", of: [{ type: "orderItem" }] },
+    { name: "hasRandomPair", title: "Has Random Pair", type: "boolean", initialValue: false },
+    { name: "randomPairNo", title: "Random Pair Number", type: "number" },
+    { name: "randomPairSize", title: "Random Pair Size (pick style at packing)", type: "string" },
 
     { name: "customerName", title: "Customer Name", type: "string" },
     { name: "instagramId", title: "Instagram ID", type: "string" },
@@ -317,7 +322,6 @@ const order = {
     },
   },
 }
-
 export const schemaTypes: SchemaTypeDefinition[] = [shoe, review, banner, settings, orderItem, order]
 
 export const schema: { types: SchemaTypeDefinition[] } = {
