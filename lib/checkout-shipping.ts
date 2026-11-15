@@ -1,9 +1,10 @@
 import {
   COD_CHARGE,
+  TWO_PAIR_ONLINE_SHIPPING,
+  TWO_PAIR_ONLINE_OUTSIDE_KERALA_EXTRA,
   ONE_PAIR_ONLINE_SHIPPING,
   ONE_PAIR_COD_SHIPPING,
   ONE_PAIR_OUTSIDE_KERALA_EXTRA,
-  TWO_PAIR_ONLINE_OUTSIDE_KERALA_EXTRA,
 } from "./checkout-constants";
 
 export type OfferType = "one-pair" | "two-pair";
@@ -15,6 +16,11 @@ export function isOutsideKerala(state: string): boolean {
   return s !== "" && s !== "kerala";
 }
 
+/**
+ * Base shipping (Kerala price).
+ *  - One pair: online 0, COD 150
+ *  - Two pair: online 150, COD 300
+ */
 export function getBaseShipping(
   offerType: OfferType,
   shippingMethod: ShippingMethod,
@@ -24,20 +30,22 @@ export function getBaseShipping(
       ? ONE_PAIR_ONLINE_SHIPPING
       : ONE_PAIR_COD_SHIPPING;
   }
-  return shippingMethod === "online" ? 0 : COD_CHARGE;
+  return shippingMethod === "online" ? TWO_PAIR_ONLINE_SHIPPING : COD_CHARGE;
 }
 
 /**
  * Extra shipping when delivering outside Kerala.
  *  - One pair: +50 (prepaid and COD)
- *  - Two pair: +100 (prepaid only)
+ *  - Two pair: +100 (prepaid only), COD stays 300
  */
 export function getOutsideKeralaExtra(
   offerType: OfferType,
   shippingMethod: ShippingMethod,
 ): number {
   if (offerType === "one-pair") return ONE_PAIR_OUTSIDE_KERALA_EXTRA;
-  return shippingMethod === "online" ? TWO_PAIR_ONLINE_OUTSIDE_KERALA_EXTRA : 0;
+  return shippingMethod === "online"
+    ? TWO_PAIR_ONLINE_OUTSIDE_KERALA_EXTRA
+    : 0;
 }
 
 export function getShippingBreakdown({
