@@ -1,0 +1,139 @@
+import { Truck, Flame, SprayCan, Plus } from "lucide-react";
+import Link from "next/link";
+import { formatDeliveryDate } from "@/lib/checkout-utils";
+import {
+  BASE_PRICE,
+  ONE_PAIR_PRICE,
+  SHOE_CLEANER_PRICE,
+  ONLINE_DELIVERY_MIN_DAYS,
+  ONLINE_DELIVERY_MAX_DAYS,
+  COD_DELIVERY_MIN_DAYS,
+  COD_DELIVERY_MAX_DAYS,
+} from "@/lib/checkout-constants";
+
+export function OrderSummary({
+  isOnePair,
+  pair1Extra,
+  pair2Extra,
+  freeSocksOffer,
+  shoeCleanerAddon,
+  addShoeCleaner,
+  selectedCustomAddons = [],
+  shippingMethod,
+  shippingCharge,
+  outsideKeralaExtra,
+  prepaidSavings,
+  activeDeliveryEnd,
+  totalAmount,
+}: {
+  isOnePair: boolean;
+  pair1Extra: number;
+  pair2Extra: number;
+  freeSocksOffer: boolean;
+  shoeCleanerAddon: boolean;
+  addShoeCleaner: boolean;
+  selectedCustomAddons?: { _key: string; title: string; price: number }[];
+  shippingMethod: "online" | "cod";
+  shippingCharge: number;
+  outsideKeralaExtra: number;
+  prepaidSavings: number;
+  activeDeliveryEnd: Date;
+  totalAmount: number;
+}) {
+  return (
+    <div className="mt-6 rounded-2xl bg-muted/40 p-5">
+      <div className="space-y-2.5">
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">
+            Base price ({isOnePair ? "1 pair" : "2 pairs"})
+          </span>
+          <span>₹{isOnePair ? ONE_PAIR_PRICE : BASE_PRICE}</span>
+        </div>
+        {pair1Extra > 0 && (
+          <div className="flex justify-between text-xs text-muted-foreground pl-3">
+            <span>Extra — Pair 1</span>
+            <span>+₹{pair1Extra}</span>
+          </div>
+        )}
+        {pair2Extra > 0 && (
+          <div className="flex justify-between text-xs text-muted-foreground pl-3">
+            <span>Extra — Pair 2</span>
+            <span>+₹{pair2Extra}</span>
+          </div>
+        )}
+        {freeSocksOffer && (
+          <div className="flex justify-between text-sm">
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <Flame className="h-3.5 w-3.5" /> Flame socks
+            </span>
+            <span className="font-medium">Free</span>
+          </div>
+        )}
+        {shoeCleanerAddon && addShoeCleaner && (
+          <div className="flex justify-between text-sm">
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <SprayCan className="h-3.5 w-3.5" /> Shoe cleaner
+            </span>
+            <span>+₹{SHOE_CLEANER_PRICE}</span>
+          </div>
+        )}
+        {selectedCustomAddons.map((addon) => (
+          <div key={addon._key} className="flex justify-between text-sm">
+            <span className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{addon.title}</span>
+            </span>
+            <span>+₹{addon.price}</span>
+          </div>
+        ))}
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Shipping</span>
+          {shippingCharge === 0 ? (
+            <span className="font-medium">Free</span>
+          ) : (
+            <span>₹{shippingCharge}</span>
+          )}
+        </div>
+        {outsideKeralaExtra > 0 && (
+          <div className="flex justify-between text-xs text-muted-foreground pl-3">
+            <span>Outside Kerala (included above)</span>
+            <span>+₹{outsideKeralaExtra}</span>
+          </div>
+        )}
+
+        <div className="rounded-xl bg-background p-4 flex items-center gap-3 mt-1">
+          <Truck className="h-5 w-5 text-muted-foreground shrink-0" strokeWidth={1.75} />
+          <div>
+            <p className="text-xs font-medium text-foreground">
+              Arrives by {formatDeliveryDate(activeDeliveryEnd)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {shippingMethod === "online"
+                ? `${ONLINE_DELIVERY_MIN_DAYS}–${ONLINE_DELIVERY_MAX_DAYS}`
+                : `${COD_DELIVERY_MIN_DAYS}–${COD_DELIVERY_MAX_DAYS}`}{" "}
+              working days
+            </p>
+          </div>
+        </div>
+
+        <div className="border-t border-border/60 pt-3 flex justify-between font-semibold text-base">
+          <span>Total</span>
+          <span>₹{totalAmount}</span>
+        </div>
+
+        {shippingMethod === "cod" && prepaidSavings > 0 && (
+          <p className="text-xs text-muted-foreground text-center">
+            Switch to prepaid to save ₹{prepaidSavings}
+          </p>
+        )}
+
+        <div className="border-t border-border/60 pt-3 text-xs text-muted-foreground">
+          By placing this order, you agree to the{" "}
+          <Link href="/T&C" className="text-foreground underline underline-hover">
+            Terms and Conditions
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
